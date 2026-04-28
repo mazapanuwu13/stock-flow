@@ -18,10 +18,10 @@ import { toast } from "sonner";
 import { DashboardHeader, MetricCard, ReportsView } from "@/features/dashboard";
 import { ProductTable, ProductDialog, useInventoryMetrics } from "@/features/inventory";
 import { MovementForm, MovementTable, simulateMovementProcessing } from "@/features/movements";
-import { BranchList } from "@/features/branches";
+import { BranchList, BranchDialog, useBranches } from "@/features/branches";
 
 // Data & Types
-import { initialProducts, initialBranches, initialMovements } from "@/lib/data/seed";
+import { initialProducts, initialMovements } from "@/lib/data/seed";
 import { formatCurrency } from "@/lib/utils/formatting";
 import type {
   Product,
@@ -31,16 +31,20 @@ import type {
   CreateProductInput,
   CreateMovementInput,
   MovementStatus,
-} from "@/types";
+} from "@/types"; // Branch still used by editingBranch state
 
 export default function StockFlowDashboard() {
   const [currentView, setCurrentView] = useState<DashboardView>("dashboard");
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [branches] = useState<Branch[]>(initialBranches);
   const [movements, setMovements] = useState<Movement[]>(initialMovements);
 
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Branches — connected to API
+  const { branches, isLoading: branchesLoading, createBranch, updateBranch, deleteBranch } = useBranches();
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
 
   // Use the inventory metrics hook
   const { totalStockValue, lowStockProducts } = useInventoryMetrics(products);
@@ -221,17 +225,29 @@ export default function StockFlowDashboard() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">Branches</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Sucursales</h2>
                 <p className="text-muted-foreground">
-                  View and manage your distribution locations.
+                  Visualiza y administra tus ubicaciones.
                 </p>
               </div>
-              <Button>
+              <Button onClick={() => { setEditingBranch(null); setBranchDialogOpen(true); }}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Branch
+                Nueva Sucursal
               </Button>
             </div>
-            <BranchList branches={branches} products={products} />
+            {branchesLoading ? (
+              <p className="text-muted-foreground text-sm">Cargando sucursales...</p>
+            ) : (
+              <BranchList
+                branches={branches}
+                products={products}
+                onEdit={(branch) => { setEditingBranch(branch); setBranchDialogOpen(true); }}
+                onDelete={async (id) => {
+                  await deleteBranch(id);
+                  toast.success("Sucursal eliminada");
+                }}
+              />
+            )}
           </div>
         );
 
@@ -302,6 +318,21 @@ export default function StockFlowDashboard() {
         product={editingProduct}
         existingProducts={products}
         branches={branches}
+      />
+
+      <BranchDialog
+        open={branchDialogOpen}
+        onOpenChange={(open) => { setBranchDialogOpen(open); if (!open) setEditingBranch(null); }}
+        branch={editingBranch}
+        onSave={async (data) => {
+          if (editingBranch) {
+            await updateBranch(editingBranch.id, data);
+            toast.success("Sucursal actualizada");
+          } else {
+            await createBranch(data);
+            toast.success("Sucursal creada");
+          }
+        }}
       />
 
       <Toaster position="bottom-right" />
